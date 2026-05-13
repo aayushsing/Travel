@@ -1067,9 +1067,11 @@ async function generatePDF() {
       const entry = entries[i];
       const rowH = 22;
 
+      // New Page Check
       if (y + rowH > pageH - 30) {
         doc.addPage();
         y = margin;
+        // Redraw Header on new page
         doc.setFillColor(26, 26, 46);
         doc.rect(margin, y, contentW, 9, 'F');
         doc.setTextColor(201, 168, 76);
