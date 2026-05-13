@@ -956,7 +956,7 @@ function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// PDF GENERATION - FIX APPLIED HERE
+// PDF GENERATION
 async function generatePDF() {
   if (entries.length === 0) return showToast('No entries to export.', 'error');
   document.getElementById('pdfOverlay').classList.add('active');
@@ -1035,14 +1035,14 @@ async function generatePDF() {
 
     y += 26;
 
-    // TABLE HEADER - Aligned with content below
+    // TABLE HEADER
     const cols = [
       { label: '#', w: 8 },
       { label: 'RECEIPT', w: 22 },
       { label: 'ROUTE', w: 45 },
       { label: 'CATEGORY', w: 28 },
       { label: 'DATE / TIME', w: 30 },
-      { label: 'REMARKS', w: 27 }, // Adjusted width
+      { label: 'REMARKS', w: 27 },
       { label: 'AMOUNT', w: 20 }
     ];
 
@@ -1053,7 +1053,6 @@ async function generatePDF() {
     doc.setFont('helvetica', 'bold');
     let cx = margin + 2;
     cols.forEach((col, idx) => {
-      // Amount header aligned to right of its cell
       if(idx === 6) {
         doc.text(col.label, cx + col.w - 3, y + 6, { align: 'right' });
       } else {
@@ -1153,11 +1152,10 @@ async function generatePDF() {
       doc.text(rmk, cx, y + 12);
       cx += cols[5].w;
 
-      // AMOUNT - FIXED POSITIONING
+      // Amount
       doc.setTextColor(74, 124, 89);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
-      // Align to the right side of the specific amount column width
       doc.text(`$${entry.amount.toFixed(2)}`, cx + cols[6].w - 3, y + 12, { align: 'right' });
 
       y += rowH;
