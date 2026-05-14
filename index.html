@@ -732,14 +732,18 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ────────────────────────────────────────────────
 // STATE
+// ────────────────────────────────────────────────
 let entries = [];
 let editingId = null;
-let currentFileData = null; 
+let currentFileData = null; // { name, type, dataUrl }
 
 const STORAGE_KEY = 'travelpay_entries';
 
+// ────────────────────────────────────────────────
 // INIT
+// ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
   setDefaultDateTime();
@@ -752,9 +756,38 @@ function setDefaultDateTime() {
   document.getElementById('travelTime').value = now.toTimeString().slice(0,5);
 }
 
+// ────────────────────────────────────────────────
 // STORAGE
+// Stores entries with full image data. If total size
+// exceeds localStorage quota, falls back to storing
+// entries without image dataUrls (thumbnails replaced
+// with placeholders) so text data is never lost.
+// ────────────────────────────────────────────────
 function saveToStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch(e) {
+    // Quota exceeded — strip image dataUrls and retry
+    try {
+      const stripped = entries.map(entry => {
+        if (entry.file && entry.file.dataUrl && entry.file.dataUrl.length > 10000) {
+          return { ...entry, file: { name: entry.file.name, type: entry.file.type, dataUrl: null, stripped: true } };
+        }
+        return entry;
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+      showToast('Storage full: receipt images not saved (data preserved)', 'info');
+    } catch(e2) {
+      // Last resort: save without any files
+      try {
+        const noFiles = entries.map(entry => ({ ...entry, file: null }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(noFiles));
+        showToast('Storage full: receipts removed to save entry data', 'info');
+      } catch(e3) {
+        console.warn('localStorage completely full, data not persisted.');
+      }
+    }
+  }
 }
 
 function loadFromStorage() {
@@ -766,7 +799,9 @@ function loadFromStorage() {
   }
 }
 
+// ────────────────────────────────────────────────
 // FILE HANDLING
+// ────────────────────────────────────────────────
 function handleFileChange(e) {
   const file = e.target.files[0];
   if (!file) { currentFileData = null; return; }
@@ -789,7 +824,9 @@ function showFilePreview(fd) {
   }
 }
 
+// ────────────────────────────────────────────────
 // ADD / EDIT ENTRY
+// ────────────────────────────────────────────────
 function addEntry() {
   const from = document.getElementById('fromLocation').value.trim();
   const to = document.getElementById('toLocation').value.trim();
@@ -804,6 +841,7 @@ function addEntry() {
   if (isNaN(amount) || amount < 0) return showToast('Please enter a valid amount.', 'error');
 
   if (editingId !== null) {
+    // Update
     const idx = entries.findIndex(e => e.id === editingId);
     if (idx !== -1) {
       entries[idx] = {
@@ -848,6 +886,7 @@ function editEntry(id) {
   document.getElementById('submitBtn').innerHTML = '<span>✏️</span> Update Entry';
   document.getElementById('editingBanner').classList.add('visible');
 
+  // Highlight row
   document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('row-editing'));
   const row = document.querySelector(`[data-id="${id}"]`);
   if (row) row.classList.add('row-editing');
@@ -892,7 +931,9 @@ function clearForm() {
   document.getElementById('filePreview').style.display = 'none';
 }
 
+// ────────────────────────────────────────────────
 // RENDER TABLE
+// ────────────────────────────────────────────────
 function renderTable() {
   const tbody = document.getElementById('tableBody');
   const count = entries.length;
@@ -956,7 +997,9 @@ function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ────────────────────────────────────────────────
 // PDF GENERATION
+// ────────────────────────────────────────────────
 async function generatePDF() {
   if (entries.length === 0) return showToast('No entries to export.', 'error');
   document.getElementById('pdfOverlay').classList.add('active');
@@ -971,12 +1014,13 @@ async function generatePDF() {
     const contentW = pageW - margin * 2;
     let y = margin;
 
-    // HEADER BANNER
+    // ─── HEADER BANNER ───
     doc.setFillColor(26, 26, 46);
     doc.rect(0, 0, pageW, 40, 'F');
     doc.setFillColor(201, 168, 76);
     doc.rect(0, 38, pageW, 2, 'F');
 
+    // Logo circle
     doc.setFillColor(201, 168, 76);
     doc.roundedRect(margin, 8, 22, 22, 4, 4, 'F');
     doc.setTextColor(255, 255, 255);
@@ -995,11 +1039,12 @@ async function generatePDF() {
     doc.setFontSize(8);
     doc.text(`Generated: ${new Date().toLocaleString()}`, margin + 27, 32);
 
+    // Total on right
     const total = entries.reduce((s, e) => s + e.amount, 0);
     doc.setTextColor(201, 168, 76);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('GRAND TOTAL', pageW - margin, 15, { align: 'right' });
+    doc.text('GRAND TOTAL', pageW - margin - 30, 15, { align: 'right' });
     doc.setFontSize(15);
     doc.text(`$${total.toFixed(2)}`, pageW - margin, 26, { align: 'right' });
     doc.setFontSize(8);
@@ -1009,7 +1054,7 @@ async function generatePDF() {
 
     y = 50;
 
-    // SUMMARY BOX
+    // ─── SUMMARY BOX ───
     doc.setFillColor(250, 248, 243);
     doc.roundedRect(margin, y, contentW, 18, 3, 3, 'F');
     doc.setDrawColor(220, 210, 190);
@@ -1035,17 +1080,18 @@ async function generatePDF() {
 
     y += 26;
 
-    // TABLE HEADER
+    // ─── TABLE HEADER ───
     const cols = [
       { label: '#', w: 8 },
       { label: 'RECEIPT', w: 22 },
       { label: 'ROUTE', w: 45 },
       { label: 'CATEGORY', w: 28 },
       { label: 'DATE / TIME', w: 30 },
-      { label: 'REMARKS', w: 27 },
+      { label: 'REMARKS', w: 40 },
       { label: 'AMOUNT', w: 20 }
     ];
 
+    // Header row
     doc.setFillColor(26, 26, 46);
     doc.roundedRect(margin, y, contentW, 9, 2, 2, 'F');
     doc.setTextColor(201, 168, 76);
@@ -1053,8 +1099,9 @@ async function generatePDF() {
     doc.setFont('helvetica', 'bold');
     let cx = margin + 2;
     cols.forEach((col, idx) => {
-      if(idx === 6) {
-        doc.text(col.label, cx + col.w - 3, y + 6, { align: 'right' });
+      if (idx === cols.length - 1) {
+        // AMOUNT header — right-aligned to match data
+        doc.text(col.label, margin + contentW - 2, y + 6, { align: 'right' });
       } else {
         doc.text(col.label, cx + 1, y + 6);
       }
@@ -1062,30 +1109,34 @@ async function generatePDF() {
     });
     y += 11;
 
-    // TABLE ROWS
+    // ─── TABLE ROWS ───
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const rowH = 22;
 
-      // New Page Check
+      // Ensure enough space
       if (y + rowH > pageH - 30) {
         doc.addPage();
         y = margin;
-        // Redraw Header on new page
+        // Repeat header
         doc.setFillColor(26, 26, 46);
         doc.rect(margin, y, contentW, 9, 'F');
         doc.setTextColor(201, 168, 76);
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         cx = margin + 2;
-        cols.forEach((col, idx) => { 
-            if(idx === 6) doc.text(col.label, cx + col.w - 3, y + 6, { align: 'right' });
-            else doc.text(col.label, cx + 1, y + 6); 
-            cx += col.w; 
+        cols.forEach((col, idx) => {
+          if (idx === cols.length - 1) {
+            doc.text(col.label, margin + contentW - 2, y + 6, { align: 'right' });
+          } else {
+            doc.text(col.label, cx + 1, y + 6);
+          }
+          cx += col.w;
         });
         y += 11;
       }
 
+      // Row background
       if (i % 2 === 0) {
         doc.setFillColor(250, 248, 243);
         doc.rect(margin, y, contentW, rowH, 'F');
@@ -1098,29 +1149,41 @@ async function generatePDF() {
 
       cx = margin + 2;
 
-      // Index
+      // # index
       doc.setTextColor(140, 128, 112);
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
       doc.text(String(i + 1), cx + 1, y + 8);
       cx += cols[0].w;
 
-      // Receipt
+      // Receipt thumbnail
       if (entry.file && entry.file.dataUrl && entry.file.type && entry.file.type.startsWith('image/')) {
         try {
-          doc.addImage(entry.file.dataUrl, 'JPEG', cx, y + 2, 18, 18);
-        } catch(e) {
+          const imgData = entry.file.dataUrl;
+          // Draw rounded rect background
           doc.setFillColor(240, 235, 225);
           doc.rect(cx, y + 2, 18, 18, 'F');
+          doc.addImage(imgData, 'JPEG', cx, y + 2, 18, 18);
+        } catch(imgErr) {
+          doc.setFillColor(240, 235, 225);
+          doc.rect(cx, y + 2, 18, 18, 'F');
+          doc.setTextColor(140, 128, 112);
+          doc.setFontSize(7);
+          doc.text('IMG', cx + 4, y + 12);
         }
       } else if (entry.file && entry.file.type === 'application/pdf') {
         doc.setFillColor(192, 82, 42);
         doc.roundedRect(cx, y + 2, 18, 18, 2, 2, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.text('PDF', cx + 6, y + 12);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text('PDF', cx + 4, y + 13);
       } else {
         doc.setFillColor(228, 218, 200);
         doc.roundedRect(cx, y + 2, 18, 18, 2, 2, 'F');
+        doc.setTextColor(140, 128, 112);
+        doc.setFontSize(9);
+        doc.text('—', cx + 7, y + 13);
       }
       cx += cols[1].w;
 
@@ -1128,44 +1191,60 @@ async function generatePDF() {
       doc.setTextColor(26, 26, 46);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
-      doc.text(entry.from.substring(0, 20), cx, y + 8);
+      const fromText = entry.from.length > 15 ? entry.from.slice(0, 13) + '…' : entry.from;
+      doc.text(fromText, cx, y + 8);
       doc.setTextColor(140, 128, 112);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
-      doc.text('→ ' + entry.to.substring(0, 20), cx, y + 15);
+      const toText = '→ ' + (entry.to.length > 14 ? entry.to.slice(0, 12) + '…' : entry.to);
+      doc.text(toText, cx, y + 15);
       cx += cols[2].w;
 
       // Category
       doc.setTextColor(74, 124, 89);
-      doc.text(entry.category.replace(/[^\w\s\/]/g, '').trim(), cx, y + 12);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      const catClean = entry.category.replace(/[^\w\s\/]/g, '').trim();
+      doc.text(catClean, cx, y + 12);
       cx += cols[3].w;
 
-      // Date
+      // Date/time
       doc.setTextColor(26, 26, 46);
-      const dStr = entry.date ? new Date(entry.date + 'T00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' }) : '—';
-      doc.text(dStr, cx, y + 8);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      const dateStr = entry.date ? new Date(entry.date + 'T00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' }) : '—';
+      doc.text(dateStr, cx, y + 8);
       doc.setTextColor(140, 128, 112);
+      doc.setFontSize(7);
       doc.text(entry.time || '', cx, y + 15);
       cx += cols[4].w;
 
       // Remarks
       doc.setTextColor(100, 90, 80);
-      const rmk = entry.remarks ? entry.remarks.substring(0, 25) : '—';
-      doc.text(rmk, cx, y + 12);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      if (entry.remarks) {
+        const rmk = entry.remarks.length > 30 ? entry.remarks.slice(0, 28) + '…' : entry.remarks;
+        const lines = doc.splitTextToSize(rmk, cols[5].w - 4);
+        doc.text(lines.slice(0, 2), cx, y + 8);
+      } else {
+        doc.text('—', cx, y + 12);
+      }
       cx += cols[5].w;
 
-      // Amount
+      // Amount — anchored to right edge of content area to prevent overflow
       doc.setTextColor(74, 124, 89);
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
-      doc.text(`$${entry.amount.toFixed(2)}`, cx + cols[6].w - 3, y + 12, { align: 'right' });
+      doc.text(`$${entry.amount.toFixed(2)}`, margin + contentW - 2, y + 12, { align: 'right' });
 
       y += rowH;
     }
 
-    // TOTAL FOOTER
+    // ─── TOTAL FOOTER ───
     y += 4;
     if (y + 20 > pageH - 20) { doc.addPage(); y = margin; }
+
     doc.setFillColor(26, 26, 46);
     doc.roundedRect(margin, y, contentW, 16, 3, 3, 'F');
     doc.setFillColor(201, 168, 76);
@@ -1183,6 +1262,7 @@ async function generatePDF() {
     doc.setFont('helvetica', 'bold');
     doc.text(`$${total.toFixed(2)}`, margin + contentW - 4, y + 11, { align: 'right' });
 
+    // ─── PAGE FOOTER ───
     const totalPages = doc.getNumberOfPages();
     for (let pg = 1; pg <= totalPages; pg++) {
       doc.setPage(pg);
@@ -1190,16 +1270,20 @@ async function generatePDF() {
       doc.rect(0, pageH - 12, pageW, 12, 'F');
       doc.setTextColor(140, 128, 112);
       doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
       doc.text('TravelPay Reimbursement Report — Confidential', margin, pageH - 4);
       doc.text(`Page ${pg} of ${totalPages}`, pageW - margin, pageH - 4, { align: 'right' });
     }
 
-    doc.save(`TravelPay_${new Date().toISOString().slice(0,10)}.pdf`);
+    // ─── SAVE ───
+    const filename = `TravelPay_${new Date().toISOString().slice(0,10)}.pdf`;
+    doc.save(filename);
     showToast('PDF downloaded successfully!', 'success');
   } catch(err) {
     console.error(err);
-    showToast('PDF generation failed.', 'error');
+    showToast('PDF generation failed. Try again.', 'error');
   }
+
   document.getElementById('pdfOverlay').classList.remove('active');
 }
 
@@ -1212,17 +1296,22 @@ function getDateRange() {
   return `${fmt(dates[0])} – ${fmt(dates[dates.length - 1])}`;
 }
 
+// ────────────────────────────────────────────────
 // TOAST
+// ────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg, type = 'info') {
   const toast = document.getElementById('toast');
-  toast.innerHTML = msg;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  toast.innerHTML = `${icons[type] || ''} ${msg}`;
   toast.className = `toast ${type} show`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3000);
 }
 
-// DRAG & DROP
+// ────────────────────────────────────────────────
+// DRAG & DROP on upload area
+// ────────────────────────────────────────────────
 const uploadArea = document.getElementById('uploadArea');
 uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.borderColor = 'var(--gold)'; });
 uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = ''; });
@@ -1231,6 +1320,8 @@ uploadArea.addEventListener('drop', e => {
   uploadArea.style.borderColor = '';
   const file = e.dataTransfer.files[0];
   if (!file) return;
+  const validTypes = ['image/jpeg','image/png','image/webp','image/gif','application/pdf'];
+  if (!validTypes.includes(file.type)) return showToast('Please upload an image or PDF.', 'error');
   const reader = new FileReader();
   reader.onload = ev => {
     currentFileData = { name: file.name, type: file.type, dataUrl: ev.target.result };
